@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Spelling Runner</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: 'Courier New', Courier, monospace;
+      touch-action: none;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      background: #0f0f1a;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    }
+    @media (min-width: 600px) {
+      #game-container {
+        max-width: 560px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+    }
+    @media (min-width: 900px) {
+      #game-container {
+        max-width: 600px;
+      }
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+    }
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 10;
+    }
+    #header {
+      width: 100%;
+      padding: 12px 16px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+    }
+    #score-box, #timer-box {
+      font-size: 18px;
+      font-weight: bold;
+      color: #e0e0e0;
+      background: rgba(255,255,255,0.08);
+      padding: 6px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    @media (min-width: 500px) {
+      #score-box, #timer-box {
+        font-size: 20px;
+        padding: 8px 18px;
+      }
+      #header {
+        padding: 14px 20px 10px;
+      }
+    }
+    #score-box span, #timer-box span {
+      color: #00ff9f;
+    }
+    #timer-box.urgent span {
+      color: #ff4d6d;
+      animation: pulse 0.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    #word-display {
+      margin-top: 20px;
+      font-size: 54px;
+      font-weight: 900;
+      letter-spacing: 14px;
+      text-transform: uppercase;
+      color: #555;
+      text-shadow: 0 2px 0 #222;
+      transition: all 0.15s;
+    }
+    @media (min-width: 500px) {
+      #word-display {
+        font-size: 60px;
+        letter-spacing: 16px;
+        margin-top: 24px;
+      }
+    }
+    @media (min-width: 700px) {
+      #word-display {
+        font-size: 68px;
+        letter-spacing: 18px;
+      }
+    }
+    #word-display .lit {
+      color: #00ff9f;
+      text-shadow: 0 0 12px #00ff9f, 0 0 24px #00ff9f88;
+    }
+    #word-display .current {
+      color: #ffd700;
+      text-shadow: 0 0 10px #ffd700;
+      animation: glow 0.8s ease-in-out infinite alternate;
+    }
+    @keyframes glow {
+      from { text-shadow: 0 0 8px #ffd700; }
+      to { text-shadow: 0 0 18px #ffd700, 0 0 30px #ffd70088; }
+    }
+    #instructions {
+      position: absolute;
+      bottom: 28%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.5);
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    /* Screens */
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(10, 10, 25, 0.92);
+      z-index: 20;
+      pointer-events: auto;
+      padding: 20px;
+      text-align: center;
+    }
+    .screen.hidden {
+      display: none;
+    }
+    .screen h1 {
+      font-size: 36px;
+      color: #00ff9f;
+      text-shadow: 0 0 20px #00ff9f88;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+    .screen .subtitle {
+      color: #aaa;
+      font-size: 15px;
+      margin-bottom: 28px;
+      max-width: 280px;
+      line-height: 1.4;
+    }
+    @media (min-width: 500px) {
+      .screen h1 {
+        font-size: 48px;
+      }
+      .screen .subtitle {
+        font-size: 17px;
+        max-width: 340px;
+      }
+      .btn {
+        padding: 18px 56px;
+        font-size: 22px;
+      }
+      .howto {
+        font-size: 14px;
+        max-width: 360px;
+      }
+    }
+    .screen .score-big {
+      font-size: 64px;
+      color: #ffd700;
+      font-weight: 900;
+      margin: 10px 0 6px;
+      text-shadow: 0 0 30px #ffd70066;
+    }
+    .screen .score-label {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .btn {
+      background: linear-gradient(135deg, #00c853, #00ff9f);
+      color: #0a0a14;
+      border: none;
+      padding: 16px 48px;
+      font-size: 20px;
+      font-weight: 900;
+      font-family: inherit;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #008c3a, 0 10px 20px rgba(0,0,0,0.4);
+      transition: transform 0.1s, box-shadow 0.1s;
+      letter-spacing: 1px;
+      pointer-events: auto;
+    }
+    .btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #008c3a, 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .howto {
+      margin-top: 32px;
+      color: #666;
+      font-size: 13px;
+      line-height: 1.6;
+      max-width: 300px;
+    }
+    .howto strong {
+      color: #00ff9f;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-overlay">
+      <div id="header">
+        <div id="score-box">Words: <span id="score">0</span></div>
+        <div id="timer-box">Time: <span id="timer">60</span></div>
+      </div>
+      <div id="word-display"></div>
+      <div id="instructions">Tap / click a lane • swipe • or use ← → keys</div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen">
+      <h1>SPELLING<br>RUNNER</h1>
+      <p class="subtitle">Hop the lanes &amp; catch the right letters to spell CVC words!</p>
+      <button class="btn" id="start-btn">PLAY</button>
+      <div class="howto">
+        <strong>How to play</strong><br>
+        • Three letters race toward you<br>
+        • One is the next letter you need<br>
+        • Tap/click a lane, swipe, or use arrow keys<br>
+        • Spell as many words as you can in 60 seconds!
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="screen hidden">
+      <h1>TIME'S UP!</h1>
+      <div class="score-big" id="final-score">0</div>
+      <div class="score-label">words spelled</div>
+      <button class="btn" id="restart-btn">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+    // ============== CONFIG & DATA ==============
+    const CVC_WORDS = [
+      "cat", "dog", "bat", "hat", "mat", "sat", "rat", "fat",
+      "pig", "dig", "big", "wig", "log", "fog", "hop", "mop",
+      "top", "pop", "cup", "pup", "run", "sun", "fun", "bun", "pin",
+      "bed", "red", "net", "pet", "jet", "box", "fox", "mix",
+      "cut", "nut", "dad", "mad", "hen"
+    ];
+
+    const LANE_COUNT = 3;
+    const LETTER_SPEED_BASE = 2.8;
+    const SPAWN_INTERVAL = 1.35; // seconds between letter sets
+    const COLLECT_Y_RATIO = 0.78; // where letters are "collected"
+
+    // ============== STATE ==============
+    let canvas, ctx;
+    let width, height;
+    let dpr = 1;
+
+    let gameState = "menu"; // menu | playing | over
+    let score = 0;
+    let timeLeft = 60;
+    let currentWord = "";
+    let letterIndex = 0; // next letter needed (0-2)
+    let playerLane = 1;
+    let targetLane = 1;
+    let playerX = 0;
+    let laneWidth = 0;
+    let laneCenters = [];
+
+    let activeLetters = []; // { char, lane, y, isCorrect, collected }
+    let spawnTimer = 0;
+    let lastTimestamp = 0;
+    let animId = null;
+
+    let audioCtx = null;
+
+    // ============== INIT ==============
+    function init() {
+      canvas = document.getElementById("gameCanvas");
+      ctx = canvas.getContext("2d");
+      resize();
+      window.addEventListener("resize", resize);
+      window.addEventListener("orientationchange", () => setTimeout(resize, 100));
+
+      // Input
+      canvas.addEventListener("pointerdown", onPointerDown);
+      canvas.addEventListener("pointermove", onPointerMove);
+      canvas.addEventListener("pointerup", onPointerUp);
+      document.addEventListener("keydown", onKeyDown);
+
+      document.getElementById("start-btn").addEventListener("click", startGame);
+      document.getElementById("restart-btn").addEventListener("click", startGame);
+
+      // Prevent scrolling on mobile
+      document.body.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+
+      drawMenuBackground();
+    }
+
+    function resize() {
+      const container = document.getElementById("game-container");
+      const rect = container.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width;
+      height = rect.height;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      laneWidth = width / LANE_COUNT;
+      laneCenters = [];
+      for (let i = 0; i < LANE_COUNT; i++) {
+        laneCenters.push(laneWidth * (i + 0.5));
+      }
+      playerX = laneCenters[playerLane];
+    }
+
+    // ============== AUDIO ==============
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    }
+
+    function playDing() {
+      ensureAudio();
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, t);
+      osc.frequency.exponentialRampToValueAtTime(1320, t + 0.08);
+      gain.gain.setValueAtTime(0.35, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.25);
+    }
+
+    function playBuzz() {
+      ensureAudio();
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(140, t);
+      osc.frequency.linearRampToValueAtTime(90, t + 0.18);
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.22);
+    }
+
+    function playSuccess() {
+      ensureAudio();
+      const t = audioCtx.currentTime;
+      [523, 659, 784].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.2, t + i * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t + i * 0.09);
+        osc.stop(t + i * 0.09 + 0.2);
+      });
+    }
+
+    // ============== GAME FLOW ==============
+    function startGame() {
+      ensureAudio();
+      score = 0;
+      timeLeft = 60;
+      playerLane = 1;
+      targetLane = 1;
+      playerX = laneCenters[1];
+      activeLetters = [];
+      spawnTimer = 0.4;
+      letterIndex = 0;
+      pickNewWord();
+      updateUI();
+      document.getElementById("start-screen").classList.add("hidden");
+      document.getElementById("gameover-screen").classList.add("hidden");
+      document.getElementById("instructions").style.display = "block";
+      gameState = "playing";
+      lastTimestamp = performance.now();
+      if (animId) cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+      gameState = "over";
+      document.getElementById("final-score").textContent = score;
+      document.getElementById("gameover-screen").classList.remove("hidden");
+      document.getElementById("instructions").style.display = "none";
+      if (animId) cancelAnimationFrame(animId);
+    }
+
+    function pickNewWord() {
+      currentWord = CVC_WORDS[Math.floor(Math.random() * CVC_WORDS.length)];
+      letterIndex = 0;
+      updateWordDisplay();
+    }
+
+    function updateWordDisplay() {
+      const el = document.getElementById("word-display");
+      el.innerHTML = "";
+      for (let i = 0; i < currentWord.length; i++) {
+        const span = document.createElement("span");
+        span.textContent = currentWord[i];
+        if (i < letterIndex) {
+          span.className = "lit";
+        } else if (i === letterIndex) {
+          span.className = "current";
+        }
+        el.appendChild(span);
+      }
+    }
+
+    function updateUI() {
+      document.getElementById("score").textContent = score;
+      document.getElementById("timer").textContent = Math.ceil(timeLeft);
+      const timerBox = document.getElementById("timer-box");
+      if (timeLeft <= 10) {
+        timerBox.classList.add("urgent");
+      } else {
+        timerBox.classList.remove("urgent");
+      }
+    }
+
+    // ============== LETTERS ==============
+    function spawnLetterSet() {
+      if (letterIndex >= 3) return;
+      const needed = currentWord[letterIndex].toUpperCase();
+      const correctLane = Math.floor(Math.random() * LANE_COUNT);
+
+      // Generate two wrong letters (different from needed)
+      const alphabet = "BCDFGHJKLMNPQRSTVWXYZAEIOU";
+      let wrongs = [];
+      while (wrongs.length < 2) {
+        const ch = alphabet[Math.floor(Math.random() * alphabet.length)];
+        if (ch !== needed && !wrongs.includes(ch)) {
+          wrongs.push(ch);
+        }
+      }
+
+      let wrongIdx = 0;
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        const isCorrect = (lane === correctLane);
+        const char = isCorrect ? needed : wrongs[wrongIdx++];
+        activeLetters.push({
+          char,
+          lane,
+          y: -60,
+          isCorrect,
+          collected: false
+        });
+      }
+    }
+
+    function updateLetters(dt) {
+      const speed = LETTER_SPEED_BASE * (1 + (60 - timeLeft) * 0.012); // gentle speed-up
+      const collectY = height * COLLECT_Y_RATIO;
+      const removeY = height + 80;
+
+      for (let i = activeLetters.length - 1; i >= 0; i--) {
+        const L = activeLetters[i];
+        if (L.collected) {
+          activeLetters.splice(i, 1);
+          continue;
+        }
+        L.y += speed * 60 * dt; // normalize to ~60fps feel
+
+        // Collection check
+        if (L.y >= collectY && L.y < collectY + speed * 60 * dt + 20) {
+          if (L.lane === playerLane) {
+            L.collected = true;
+            if (L.isCorrect) {
+              // SUCCESS
+              playDing();
+              letterIndex++;
+              updateWordDisplay();
+              if (letterIndex >= 3) {
+                // Word complete!
+                score++;
+                playSuccess();
+                updateUI();
+                // Clear remaining letters of this set
+                activeLetters.forEach(a => a.collected = true);
+                setTimeout(() => {
+                  if (gameState === "playing") pickNewWord();
+                }, 280);
+              }
+            } else {
+              // WRONG
+              playBuzz();
+            }
+          }
+        }
+
+        if (L.y > removeY) {
+          activeLetters.splice(i, 1);
+        }
+      }
+
+      // Spawn logic
+      spawnTimer -= dt;
+      if (spawnTimer <= 0 && letterIndex < 3) {
+        // Only spawn if no active letters are still above collect line
+        const anyComing = activeLetters.some(L => !L.collected && L.y < collectY);
+        if (!anyComing) {
+          spawnLetterSet();
+          spawnTimer = SPAWN_INTERVAL * (0.85 + Math.random() * 0.25);
+        }
+      }
+    }
+
+    // ============== PLAYER ==============
+    function updatePlayer(dt) {
+      const targetX = laneCenters[targetLane];
+      const dx = targetX - playerX;
+      if (Math.abs(dx) > 1) {
+        playerX += dx * Math.min(1, 18 * dt);
+      } else {
+        playerX = targetX;
+        playerLane = targetLane;
+      }
+    }
+
+    // ============== INPUT ==============
+    let pointerStartX = null;
+    let isSwiping = false;
+
+    function onPointerDown(e) {
+      if (gameState !== "playing") return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left);
+      pointerStartX = x;
+      isSwiping = false;
+
+      // Immediate lane select on tap
+      const lane = Math.floor(x / laneWidth);
+      if (lane >= 0 && lane < LANE_COUNT) {
+        targetLane = lane;
+      }
+    }
+
+    function onPointerMove(e) {
+      if (gameState !== "playing" || pointerStartX === null) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const dx = x - pointerStartX;
+      if (Math.abs(dx) > 25) {
+        isSwiping = true;
+        if (dx > 0 && targetLane < 2) {
+          targetLane = Math.min(2, targetLane + 1);
+          pointerStartX = x;
+        } else if (dx < 0 && targetLane > 0) {
+          targetLane = Math.max(0, targetLane - 1);
+          pointerStartX = x;
+        }
+      }
+    }
+
+    function onPointerUp(e) {
+      pointerStartX = null;
+      isSwiping = false;
+    }
+
+    function onKeyDown(e) {
+      if (gameState !== "playing") return;
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        targetLane = Math.max(0, targetLane - 1);
+      } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        targetLane = Math.min(2, targetLane + 1);
+      } else if (e.key === "1") targetLane = 0;
+      else if (e.key === "2") targetLane = 1;
+      else if (e.key === "3") targetLane = 2;
+    }
+
+    // ============== DRAWING ==============
+    function drawBackground() {
+      // Gradient already on canvas CSS, but we can add lane lines
+      ctx.save();
+      // Subtle moving dash lines for "running" feel
+      const speed = (performance.now() / 12) % 40;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.lineWidth = 2;
+      for (let i = 1; i < LANE_COUNT; i++) {
+        const x = i * laneWidth;
+        ctx.beginPath();
+        ctx.setLineDash([18, 22]);
+        ctx.lineDashOffset = -speed;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Collect zone highlight
+      const cy = height * COLLECT_Y_RATIO;
+      ctx.fillStyle = "rgba(0, 255, 159, 0.06)";
+      ctx.fillRect(0, cy - 18, width, 36);
+      ctx.strokeStyle = "rgba(0, 255, 159, 0.18)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, cy);
+      ctx.lineTo(width, cy);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawLetters() {
+      activeLetters.forEach(L => {
+        if (L.collected) return;
+        const x = laneCenters[L.lane];
+        const y = L.y;
+
+        // Letter tile background
+        const size = Math.min(laneWidth * 0.55, 70);
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        roundRect(ctx, -size/2 + 3, -size/2 + 5, size, size, 12);
+        ctx.fill();
+
+        // Tile
+        const grad = ctx.createLinearGradient(0, -size/2, 0, size/2);
+        if (L.isCorrect) {
+          // Slightly warmer for correct? Keep neutral so player doesn't cheat
+          grad.addColorStop(0, "#2a2a4a");
+          grad.addColorStop(1, "#1a1a30");
+        } else {
+          grad.addColorStop(0, "#2a2a4a");
+          grad.addColorStop(1, "#1a1a30");
+        }
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        roundRect(ctx, -size/2, -size/2, size, size, 12);
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Letter
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold ${Math.floor(size * 0.55)}px 'Courier New', monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(L.char, 0, 2);
+
+        ctx.restore();
+      });
+    }
+
+    function drawPlayer() {
+      const x = playerX;
+      const y = height * COLLECT_Y_RATIO + 28;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      // Simple cute pixel character (yellow runner)
+      const s = Math.min(laneWidth * 0.22, 28); // scale
+
+      // Shadow
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.ellipse(0, s * 1.6, s * 0.9, s * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Legs (running pose based on time)
+      const legSwing = Math.sin(performance.now() / 90) * 0.35;
+      ctx.fillStyle = "#3d5afe";
+      // left leg
+      ctx.save();
+      ctx.rotate(-0.25 + legSwing);
+      ctx.fillRect(-s * 0.35, s * 0.5, s * 0.28, s * 0.85);
+      ctx.restore();
+      // right leg
+      ctx.save();
+      ctx.rotate(0.25 - legSwing);
+      ctx.fillRect(s * 0.08, s * 0.5, s * 0.28, s * 0.85);
+      ctx.restore();
+
+      // Body
+      ctx.fillStyle = "#00e676";
+      ctx.fillRect(-s * 0.45, -s * 0.15, s * 0.9, s * 0.85);
+
+      // Arms
+      ctx.fillStyle = "#00c853";
+      const armSwing = Math.sin(performance.now() / 90) * 0.4;
+      ctx.save();
+      ctx.rotate(-0.5 - armSwing);
+      ctx.fillRect(-s * 0.7, -s * 0.1, s * 0.25, s * 0.7);
+      ctx.restore();
+      ctx.save();
+      ctx.rotate(0.5 + armSwing);
+      ctx.fillRect(s * 0.45, -s * 0.1, s * 0.25, s * 0.7);
+      ctx.restore();
+
+      // Head
+      ctx.fillStyle = "#ffcc80";
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.55, s * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = "#222";
+      ctx.beginPath();
+      ctx.arc(-s * 0.16, -s * 0.6, s * 0.1, 0, Math.PI * 2);
+      ctx.arc(s * 0.16, -s * 0.6, s * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Smile
+      ctx.strokeStyle = "#222";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.42, s * 0.18, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+
+      // Hair / pixel top
+      ctx.fillStyle = "#5d4037";
+      ctx.fillRect(-s * 0.4, -s * 1.05, s * 0.8, s * 0.25);
+
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function drawMenuBackground() {
+      // Just a static frame for menu
+      ctx.clearRect(0, 0, width, height);
+      drawBackground();
+      // Draw a idle player in center
+      playerX = laneCenters[1];
+      drawPlayer();
+    }
+
+    // ============== MAIN LOOP ==============
+    function gameLoop(timestamp) {
+      if (gameState !== "playing") return;
+
+      const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
+      lastTimestamp = timestamp;
+
+      // Timer
+      timeLeft -= dt;
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        updateUI();
+        endGame();
+        return;
+      }
+      updateUI();
+
+      updatePlayer(dt);
+      updateLetters(dt);
+
+      // Draw
+      ctx.clearRect(0, 0, width, height);
+      drawBackground();
+      drawLetters();
+      drawPlayer();
+
+      animId = requestAnimationFrame(gameLoop);
+    }
+
+    // Boot
+    window.addEventListener("load", init);
+  </script>
+</body>
+</html>
