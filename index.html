@@ -72,7 +72,7 @@
       background: rgba(0,0,0,0.45);
       backdrop-filter: blur(4px);
     }
-    #score-box, #timer-box {
+    #score-box, #status-box {
       font-size: 18px;
       font-weight: bold;
       color: #e0e0e0;
@@ -82,7 +82,7 @@
       border: 1px solid rgba(255,255,255,0.15);
     }
     @media (min-width: 500px) {
-      #score-box, #timer-box {
+      #score-box, #status-box {
         font-size: 20px;
         padding: 8px 18px;
       }
@@ -90,12 +90,18 @@
         padding: 14px 20px 10px;
       }
     }
-    #score-box span, #timer-box span {
+    #score-box span {
       color: #00ff9f;
     }
-    #timer-box.urgent span {
+    #status-box span {
+      color: #00ff9f;
+    }
+    #status-box.urgent span {
       color: #ff4d6d;
       animation: pulse 0.5s infinite;
+    }
+    #status-box.strikes span {
+      color: #ff6b6b;
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -191,8 +197,11 @@
         max-width: 340px;
       }
       .btn {
-        padding: 18px 56px;
-        font-size: 22px;
+        padding: 16px 20px;
+        font-size: 19px;
+      }
+      .btn small {
+        font-size: 13px;
       }
       .howto {
         font-size: 14px;
@@ -211,24 +220,55 @@
       font-size: 14px;
       margin-bottom: 24px;
     }
+    .mode-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: 100%;
+      max-width: 280px;
+      margin-bottom: 8px;
+    }
+    @media (min-width: 420px) {
+      .mode-buttons {
+        flex-direction: row;
+        max-width: 420px;
+        gap: 16px;
+      }
+    }
     .btn {
       background: linear-gradient(135deg, #00c853, #00ff9f);
       color: #0a0a14;
       border: none;
-      padding: 16px 48px;
-      font-size: 20px;
+      padding: 14px 24px;
+      font-size: 18px;
       font-weight: 900;
       font-family: inherit;
-      border-radius: 50px;
+      border-radius: 18px;
       cursor: pointer;
       box-shadow: 0 6px 0 #008c3a, 0 10px 20px rgba(0,0,0,0.4);
       transition: transform 0.1s, box-shadow 0.1s;
       letter-spacing: 1px;
       pointer-events: auto;
+      line-height: 1.25;
+      flex: 1;
+    }
+    .btn small {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.75;
+      display: block;
+      margin-top: 2px;
+    }
+    .btn-survival {
+      background: linear-gradient(135deg, #ff6b35, #ff9f1c);
+      box-shadow: 0 6px 0 #c44d1a, 0 10px 20px rgba(0,0,0,0.4);
     }
     .btn:active {
       transform: translateY(4px);
       box-shadow: 0 2px 0 #008c3a, 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .btn-survival:active {
+      box-shadow: 0 2px 0 #c44d1a, 0 4px 10px rgba(0,0,0,0.3);
     }
     .howto {
       margin-top: 32px;
@@ -248,7 +288,7 @@
     <div id="ui-overlay">
       <div id="header">
         <div id="score-box">Words: <span id="score">0</span></div>
-        <div id="timer-box">Time: <span id="timer">60</span></div>
+        <div id="status-box">Time: <span id="status-value">60</span></div>
       </div>
       <div id="word-display"></div>
       <div id="instructions">Tap / click a lane • swipe • or use ← → keys</div>
@@ -258,19 +298,24 @@
     <div id="start-screen" class="screen">
       <h1>SPELLING<br>RUNNER</h1>
       <p class="subtitle">Hop the lanes &amp; catch the right letters to spell CVC words!</p>
-      <button class="btn" id="start-btn">PLAY</button>
+      <div class="mode-buttons">
+        <button class="btn" id="btn-timed">TIMED<br><small>60 seconds</small></button>
+        <button class="btn btn-survival" id="btn-survival">SURVIVAL<br><small>3 strikes</small></button>
+      </div>
       <div class="howto">
         <strong>How to play</strong><br>
         • Three letters race toward you<br>
         • One is the next letter you need<br>
         • Tap/click a lane, swipe, or use arrow keys<br>
-        • Spell as many words as you can in 60 seconds!
+        <br>
+        <strong>Timed</strong> – Score as many as you can in 60s<br>
+        <strong>Survival</strong> – No timer, but 3 wrong letters = game over (faster!)
       </div>
     </div>
 
     <!-- Game Over Screen -->
     <div id="gameover-screen" class="screen hidden">
-      <h1>TIME'S UP!</h1>
+      <h1 id="gameover-title">TIME'S UP!</h1>
       <div class="score-big" id="final-score">0</div>
       <div class="score-label">words spelled</div>
       <button class="btn" id="restart-btn">PLAY AGAIN</button>
@@ -288,9 +333,12 @@
     ];
 
     const LANE_COUNT = 3;
-    const LETTER_SPEED_BASE = 2.8;
-    const SPAWN_INTERVAL = 1.35; // seconds between letter sets
+    const LETTER_SPEED_TIMED = 2.8;
+    const LETTER_SPEED_SURVIVAL = 6.2; // much faster – less time to react
+    const SPAWN_INTERVAL = 1.35; // seconds between letter sets (timed)
+    const SPAWN_INTERVAL_SURVIVAL = 1.05; // tighter waves in survival
     const COLLECT_Y_RATIO = 0.78; // where letters are "collected"
+    const MAX_STRIKES = 3;
 
     // ============== STATE ==============
     let canvas, ctx;
@@ -298,8 +346,10 @@
     let dpr = 1;
 
     let gameState = "menu"; // menu | playing | over
+    let gameMode = "timed"; // "timed" | "survival"
     let score = 0;
     let timeLeft = 60;
+    let strikes = 0;
     let currentWord = "";
     let letterIndex = 0; // next letter needed (0-2)
     let playerLane = 1;
@@ -329,8 +379,13 @@
       canvas.addEventListener("pointerup", onPointerUp);
       document.addEventListener("keydown", onKeyDown);
 
-      document.getElementById("start-btn").addEventListener("click", startGame);
-      document.getElementById("restart-btn").addEventListener("click", startGame);
+      document.getElementById("btn-timed").addEventListener("click", () => startGame("timed"));
+      document.getElementById("btn-survival").addEventListener("click", () => startGame("survival"));
+      document.getElementById("restart-btn").addEventListener("click", () => {
+        document.getElementById("gameover-screen").classList.add("hidden");
+        document.getElementById("start-screen").classList.remove("hidden");
+        drawMenuBackground();
+      });
 
       // Prevent scrolling on mobile
       document.body.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
@@ -418,10 +473,12 @@
     }
 
     // ============== GAME FLOW ==============
-    function startGame() {
+    function startGame(mode) {
       ensureAudio();
+      gameMode = mode || "timed";
       score = 0;
       timeLeft = 60;
+      strikes = 0;
       playerLane = 1;
       targetLane = 1;
       playerX = laneCenters[1];
@@ -442,6 +499,12 @@
     function endGame() {
       gameState = "over";
       document.getElementById("final-score").textContent = score;
+      const titleEl = document.getElementById("gameover-title");
+      if (gameMode === "survival") {
+        titleEl.textContent = "GAME OVER!";
+      } else {
+        titleEl.textContent = "TIME'S UP!";
+      }
       document.getElementById("gameover-screen").classList.remove("hidden");
       document.getElementById("instructions").style.display = "none";
       if (animId) cancelAnimationFrame(animId);
@@ -470,12 +533,21 @@
 
     function updateUI() {
       document.getElementById("score").textContent = score;
-      document.getElementById("timer").textContent = Math.ceil(timeLeft);
-      const timerBox = document.getElementById("timer-box");
-      if (timeLeft <= 10) {
-        timerBox.classList.add("urgent");
+      const statusBox = document.getElementById("status-box");
+      const statusValue = document.getElementById("status-value");
+
+      if (gameMode === "timed") {
+        statusBox.classList.remove("strikes");
+        statusBox.innerHTML = `Time: <span id="status-value">${Math.ceil(timeLeft)}</span>`;
+        if (timeLeft <= 10) {
+          statusBox.classList.add("urgent");
+        } else {
+          statusBox.classList.remove("urgent");
+        }
       } else {
-        timerBox.classList.remove("urgent");
+        statusBox.classList.remove("urgent");
+        statusBox.classList.add("strikes");
+        statusBox.innerHTML = `Strikes: <span id="status-value">${strikes} / ${MAX_STRIKES}</span>`;
       }
     }
 
@@ -510,7 +582,14 @@
     }
 
     function updateLetters(dt) {
-      const speed = LETTER_SPEED_BASE * (1 + (60 - timeLeft) * 0.012); // gentle speed-up
+      // Speed: survival is base-faster; timed gently accelerates over the minute
+      let speed;
+      if (gameMode === "survival") {
+        speed = LETTER_SPEED_SURVIVAL;
+      } else {
+        speed = LETTER_SPEED_TIMED * (1 + (60 - timeLeft) * 0.012);
+      }
+
       const collectY = height * COLLECT_Y_RATIO;
       const removeY = height + 80;
 
@@ -545,6 +624,18 @@
             } else {
               // WRONG
               playBuzz();
+              // Clear the rest of this letter set so you don't get multi-hit by the same wave
+              activeLetters.forEach(a => a.collected = true);
+              if (gameMode === "survival") {
+                strikes++;
+                updateUI();
+                if (strikes >= MAX_STRIKES) {
+                  // Slight delay so the buzz plays
+                  setTimeout(() => {
+                    if (gameState === "playing") endGame();
+                  }, 320);
+                }
+              }
             }
           }
         }
@@ -561,7 +652,9 @@
         const anyComing = activeLetters.some(L => !L.collected && L.y < collectY);
         if (!anyComing) {
           spawnLetterSet();
-          spawnTimer = SPAWN_INTERVAL * (0.85 + Math.random() * 0.25);
+          // Slightly tighter spawn in survival
+          const interval = gameMode === "survival" ? SPAWN_INTERVAL_SURVIVAL : SPAWN_INTERVAL;
+          spawnTimer = interval * (0.85 + Math.random() * 0.25);
         }
       }
     }
@@ -810,13 +903,15 @@
       const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
       lastTimestamp = timestamp;
 
-      // Timer
-      timeLeft -= dt;
-      if (timeLeft <= 0) {
-        timeLeft = 0;
-        updateUI();
-        endGame();
-        return;
+      // Timer only in timed mode
+      if (gameMode === "timed") {
+        timeLeft -= dt;
+        if (timeLeft <= 0) {
+          timeLeft = 0;
+          updateUI();
+          endGame();
+          return;
+        }
       }
       updateUI();
 
